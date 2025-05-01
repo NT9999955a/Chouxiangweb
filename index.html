@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<meta charset="UTF-8">
+<head>
+    <style>
+        #spinner {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 150px;
+            height: 150px;
+            border-radius: 50%;
+            cursor: pointer;
+            background: url('https://q1.qlogo.cn/g?b=qq&nk=915891335&s=640') center/cover;
+            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+            border: 3px solid #fff;
+            will-change: transform;
+        }
+
+        #qq-input {
+            position: fixed;
+            top: calc(50% + 110px);
+            left: 50%;
+            transform: translateX(-50%);
+            width: 180px;
+            padding: 8px 12px;
+            border: 2px solid #ddd;
+            border-radius: 25px;
+            font-size: 16px;
+            text-align: center;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        #qq-input:focus {
+            border-color: #00a1d6;
+            box-shadow: 0 2px 8px rgba(0,161,214,0.3);
+        }
+
+        #counter {
+            position: fixed;
+            top: calc(50% + 150px);
+            left: 50%;
+            transform: translateX(-50%);
+            color: #000;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            text-shadow: 0 2px 3px rgba(255,255,255,0.7);
+            text-align: center;
+            margin-top: 10px;
+        }
+
+        #upload-btn {
+            position: fixed;
+            top: calc(50% + 200px);
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 8px 20px;
+            background: #00a1d6;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+
+        #upload-btn:hover {
+            background: #008cba;
+            transform: translateX(-50%) scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div id="spinner"></div>
+    <input type="text" id="qq-input" placeholder="输入QQ号" value="915891335">
+    <div id="counter">已旋转 0 圈</div>
+    <button id="upload-btn">上传数据 (0次)</button>
+
+    <script>
+        const REPORT_API = 'http://localhost:8002/report';
+        let rotation = 0;
+        let speed = 0;
+        let isRotating = false;
+        let totalCircles = 0;
+        let currentQQ = '915891335';
+        let uploadCount = 0; // 新增上传次数计数器
+        
+        const spinner = document.getElementById('spinner');
+        const counter = document.getElementById('counter');
+        const qqInput = document.getElementById('qq-input');
+        const uploadBtn = document.getElementById('upload-btn');
+
+        // 重置旋转次数
+        function resetCounter() {
+            totalCircles = 0;
+            counter.textContent = `已旋转 ${totalCircles} 圈`;
+        }
+
+        // 更新上传按钮显示
+        function updateUploadButton() {
+            uploadBtn.textContent = `上传数据 (${uploadCount}次)`;
+        }
+
+        // 数据上报函数
+        function sendReport() {
+            const data = {
+                qq: currentQQ,
+                spins: totalCircles,
+                timestamp: Date.now()
+            };
+
+            fetch(REPORT_API, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(response => {
+                if (response.ok) {
+                    uploadCount++;
+                    updateUploadButton();
+                }
+            })
+            .catch(error => {
+                console.error('网络错误:', error);
+            });
+        }
+
+        // QQ号变更处理
+        let debounceTimer;
+        qqInput.addEventListener('input', function() {
+            const qqNumber = this.value.replace(/\D/g, '');
+            this.value = qqNumber;
+            
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                if (qqNumber !== currentQQ && qqNumber.length >= 5) {
+                    currentQQ = qqNumber;
+                    spinner.style.background = `url(https://q1.qlogo.cn/g?b=qq&nk=${qqNumber}&s=640) center/cover`;
+                    resetCounter(); // 更换QQ号时重置计数器
+                    sendReport();    // 立即上报重置后的数据
+                }
+            }, 500);
+        });
+
+        // 上传按钮点击处理
+        uploadBtn.addEventListener('click', () => {
+            sendReport();
+        });
+
+        // 页面关闭前上报
+        window.addEventListener('beforeunload', () => {
+            sendReport();
+        });
+
+        // 旋转动画逻辑
+        function animate() {
+            if (speed <= 0) {
+                isRotating = false;
+                return;
+            }
+            
+            const prevRotation = rotation;
+            rotation += speed;
+            
+            const newCircles = Math.floor(rotation / 360) - Math.floor(prevRotation / 360);
+            if (newCircles > 0) {
+                totalCircles += newCircles;
+                counter.textContent = `已旋转 ${totalCircles} 圈`;
+            }
+
+            spinner.style.transform = `translate3d(-50%, -50%, 0) rotate(${rotation}deg)`;
+            speed *= Math.pow(0.99, speed/50 + 1);
+            if (speed < 0.09) speed = 0;
+            
+            requestAnimationFrame(animate);
+        }
+
+        spinner.addEventListener('click', () => {
+            speed += 15;
+            if (!isRotating) {
+                isRotating = true;
+                animate();
+            }
+        });
+
+        // 初始化显示
+        updateUploadButton();
+    </script>
+</body>
+</html>
