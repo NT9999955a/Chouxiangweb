@@ -80,31 +80,32 @@
     <button id="upload-btn">上传数据 (0次)</button>
 
     <script>
-        const REPORT_API = 'http://localhost:8002/report';
+        const REPORT_API = 'http://ntnt.back1.idcfengye.com/data.php';
         let rotation = 0;
         let speed = 0;
         let isRotating = false;
         let totalCircles = 0;
         let currentQQ = '915891335';
-        let uploadCount = 0; // 新增上传次数计数器
+        let uploadCount = 0;
         
         const spinner = document.getElementById('spinner');
         const counter = document.getElementById('counter');
         const qqInput = document.getElementById('qq-input');
         const uploadBtn = document.getElementById('upload-btn');
 
-        // 重置旋转次数
-        function resetCounter() {
+        // 重置所有旋转数据
+        function resetAll() {
             totalCircles = 0;
-            counter.textContent = `已旋转 ${totalCircles} 圈`;
+            rotation = 0;
+            speed = 0;
+            counter.textContent = `已旋转 0 圈`;
+            spinner.style.transform = `translate3d(-50%, -50%, 0) rotate(0deg)`;
         }
 
-        // 更新上传按钮显示
         function updateUploadButton() {
             uploadBtn.textContent = `上传数据 (${uploadCount}次)`;
         }
 
-        // 数据上报函数
         function sendReport() {
             const data = {
                 qq: currentQQ,
@@ -121,6 +122,7 @@
                 if (response.ok) {
                     uploadCount++;
                     updateUploadButton();
+                    resetAll(); // 上传成功后重置所有数据
                 }
             })
             .catch(error => {
@@ -139,20 +141,24 @@
                 if (qqNumber !== currentQQ && qqNumber.length >= 5) {
                     currentQQ = qqNumber;
                     spinner.style.background = `url(https://q1.qlogo.cn/g?b=qq&nk=${qqNumber}&s=640) center/cover`;
-                    resetCounter(); // 更换QQ号时重置计数器
-                    sendReport();    // 立即上报重置后的数据
+                    resetAll(); // 更换QQ时重置数据
+                    sendReport();
                 }
             }, 500);
         });
 
         // 上传按钮点击处理
         uploadBtn.addEventListener('click', () => {
-            sendReport();
+            if (totalCircles > 0) {
+                sendReport();
+            } else {
+                alert("当前没有可上传的数据！");
+            }
         });
 
         // 页面关闭前上报
         window.addEventListener('beforeunload', () => {
-            sendReport();
+            if (totalCircles > 0) sendReport();
         });
 
         // 旋转动画逻辑

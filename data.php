@@ -16,7 +16,6 @@ function handleDataReport() {
     global $dataFile;
     
     try {
-        // 验证JSON格式
         $json = file_get_contents('php://input');
         $data = json_decode($json, true);
         
@@ -24,7 +23,7 @@ function handleDataReport() {
             throw new Exception("无效的JSON格式");
         }
 
-        // 验证必要字段
+        // 验证字段
         $required = ['qq', 'spins'];
         foreach ($required as $field) {
             if (!isset($data[$field])) {
@@ -40,15 +39,31 @@ function handleDataReport() {
             throw new Exception("旋转次数必须为非负数");
         }
 
-        // 读写数据
+        // 处理数据
         $dataset = readData();
         $timestamp = date('Y-m-d H:i:s');
+        $currentSpins = (int)$data['spins'];
         
+        // 检查锁定状态
+        $isLocked = false;
+        foreach ($dataset as $item) {
+            if ($item['qq'] == $data['qq'] && ($item['locked'] ?? false)) {
+                $isLocked = true;
+                break;
+            }
+        }
+        
+        if ($isLocked) {
+            http_response_code(200);
+            echo json_encode(['status' => 'success']);
+            exit;
+        }
+
+        // 更新数据
         $found = false;
         foreach ($dataset as &$item) {
             if ($item['qq'] == $data['qq']) {
-                // 修改这里：将赋值改为累加
-                $item['spins'] += (int)$data['spins'];  // <-- 主要修改点
+                $item['spins'] += $currentSpins;
                 $item['timestamp'] = $timestamp;
                 $found = true;
                 break;
@@ -58,13 +73,15 @@ function handleDataReport() {
         if (!$found) {
             $dataset[] = [
                 'qq' => $data['qq'],
-                'spins' => (int)$data['spins'],
-                'timestamp' => $timestamp
+                'spins' => $currentSpins,
+                'timestamp' => $timestamp,
+                'locked' => false
             ];
         }
 
-        // 写入文件
-        file_put_contents($dataFile, json_encode($dataset, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
+        file_put_contents($dataFile, 
+            json_encode($dataset, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+        );
         
         http_response_code(200);
         echo json_encode(['status' => 'success']);
@@ -82,7 +99,7 @@ function showDataPage() {
     $searchQQ = $_GET['qq'] ?? '';
     $dataset = readData();
 
-    // 过滤数据
+    // 搜索过滤
     if (!empty($searchQQ)) {
         $dataset = array_filter($dataset, function($item) use ($searchQQ) {
             return strpos($item['qq'], $searchQQ) !== false;
@@ -92,49 +109,66 @@ function showDataPage() {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>QQ旋转数据查询系统</title>
+    <title>QQ旋转数据查询</title>
     <style>
-        .container { max-width: 800px; margin: 20px auto; padding: 20px; }
-        .search-box { margin-bottom: 30px; text-align: center; }
-        input[type="text"] { 
-            padding: 10px; 
-            width: 300px; 
+        /* 原始样式 */
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .search-box {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .search-input {
+            padding: 10px 15px;
+            width: 300px;
             border: 2px solid #00a1d6;
             border-radius: 25px;
             font-size: 16px;
+            outline: none;
+            transition: all 0.3s;
         }
-        button {
+        .search-input:focus {
+            box-shadow: 0 0 8px rgba(0,161,214,0.3);
+        }
+        .search-btn {
             padding: 10px 25px;
             background: #00a1d6;
             color: white;
             border: none;
             border-radius: 25px;
             cursor: pointer;
+            margin-left: 10px;
             transition: all 0.3s;
         }
-        button:hover {
+        .search-btn:hover {
             background: #008cba;
             transform: scale(1.05);
         }
-        table {
+        .data-table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
-        th, td {
+        .data-table th,
+        .data-table td {
             padding: 12px;
             text-align: left;
             border-bottom: 1px solid #ddd;
         }
-        th {
-            background: #f8f9fa;
-            font-weight: 600;
+        .data-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
         }
-        .no-data { 
-            text-align: center; 
+        .no-data {
+            text-align: center;
             color: #666;
             padding: 20px;
+            margin-top: 20px;
         }
     </style>
 </head>
@@ -143,22 +177,23 @@ function showDataPage() {
         <div class="search-box">
             <form method="GET">
                 <input type="text" 
+                       class="search-input"
                        name="qq" 
                        placeholder="输入QQ号进行搜索" 
                        value="<?= htmlspecialchars($searchQQ) ?>"
                        pattern="\d{5,12}"
                        title="请输入5-12位数字">
-                <button type="submit">立即搜索</button>
+                <button type="submit" class="search-btn">立即查询</button>
             </form>
         </div>
 
         <?php if (!empty($dataset)): ?>
-        <table>
+        <table class="data-table">
             <thead>
                 <tr>
                     <th>QQ号</th>
                     <th>旋转次数</th>
-                    <th>最后更新时间</th>
+                    <th>最后更新</th>
                 </tr>
             </thead>
             <tbody>
@@ -172,7 +207,7 @@ function showDataPage() {
             </tbody>
         </table>
         <?php else: ?>
-        <div class="no-data">当前没有找到匹配的数据记录</div>
+        <div class="no-data">没有找到相关数据</div>
         <?php endif; ?>
     </div>
 </body>
@@ -190,13 +225,8 @@ function readData() {
     $content = file_get_contents($dataFile);
     $data = json_decode($content, true);
     
-    // 数据有效性验证
-    if (!is_array($data)) return [];
-    
-    return array_filter($data, function($item) {
-        return isset($item['qq'], $item['spins'], $item['timestamp']);
+    return array_filter($data ?? [], function($item) {
+        return isset($item['qq'], $item['spins'], $item['timestamp']) 
+            && $item['spins'] >= 0;
     });
 }
-
-
-
